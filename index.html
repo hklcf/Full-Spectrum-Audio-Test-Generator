@@ -21,6 +21,12 @@
         .custom-range::-ms-thumb {
             background: #0d6efd;
         }
+        #waveformVisualizer {
+            width: 100%;
+            height: 100px;
+            background-color: #e9ecef;
+            margin-bottom: 1rem;
+        }
     </style>
 </head>
 <body>
@@ -32,6 +38,8 @@
                         <h1 class="card-title text-center mb-4">全頻域音頻測試生成器</h1>
                         <p class="text-danger fw-bold">警告：本工具可產生從次聲波到超聲波的全頻域聲音。請謹慎使用，注意音量！高頻聲音可能引起不適或無法被聽到。</p>
                         
+                        <canvas id="waveformVisualizer"></canvas>
+
                         <div class="mb-3">
                             <label for="waveType" class="form-label">波形類型：</label>
                             <select id="waveType" class="form-select">
@@ -48,8 +56,8 @@
                         </div>
                         
                         <div class="mb-3">
-                            <label for="volume" class="form-label">音量：</label>
-                            <input type="range" class="form-range custom-range" id="volume" min="0" max="1" step="0.1" value="0.1">
+                            <label for="volume" class="form-label">音量：<span id="volumeValue" class="badge bg-secondary">10%</span></label>
+                            <input type="range" class="form-range custom-range" id="volume" min="0" max="1" step="0.01" value="0.1">
                         </div>
                         
                         <button id="toggleButton" class="btn btn-primary w-100 mb-3">開始測試</button>
@@ -63,59 +71,110 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        let audioContext;
-        let oscillator;
-        let gainNode;
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let oscillator = null;
+        let gainNode = null;
+        let analyser = null;
         let isPlaying = false;
 
         const toggleButton = document.getElementById('toggleButton');
         const frequencySlider = document.getElementById('frequency');
         const frequencyValue = document.getElementById('frequencyValue');
+        const volumeSlider = document.getElementById('volume');
+        const volumeValue = document.getElementById('volumeValue');
         const frequencyInfo = document.getElementById('frequencyInfo');
+        const waveformVisualizer = document.getElementById('waveformVisualizer');
+        const visualizerContext = waveformVisualizer.getContext('2d');
 
         const initAudio = () => {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
             oscillator = audioContext.createOscillator();
             gainNode = audioContext.createGain();
+            analyser = audioContext.createAnalyser();
 
-            const waveType = document.getElementById('waveType').value;
-            const frequency = parseFloat(frequencySlider.value);
-            const volume = parseFloat(document.getElementById('volume').value);
-
-            oscillator.type = waveType;
-            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-            gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+            oscillator.type = document.getElementById('waveType').value;
+            oscillator.frequency.setValueAtTime(parseFloat(frequencySlider.value), audioContext.currentTime);
+            gainNode.gain.setValueAtTime(parseFloat(volumeSlider.value), audioContext.currentTime);
 
             oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
+            gainNode.connect(analyser);
+            analyser.connect(audioContext.destination);
+        };
+
+        const startVisualization = () => {
+            analyser.fftSize = 2048;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            visualizerContext.clearRect(0, 0, waveformVisualizer.width, waveformVisualizer.height);
+
+            const draw = () => {
+                requestAnimationFrame(draw);
+                analyser.getByteTimeDomainData(dataArray);
+
+                visualizerContext.fillStyle = 'rgb(233, 236, 239)';
+                visualizerContext.fillRect(0, 0, waveformVisualizer.width, waveformVisualizer.height);
+
+                visualizerContext.lineWidth = 2;
+                visualizerContext.strokeStyle = 'rgb(13, 110, 253)';
+                visualizerContext.beginPath();
+
+                const sliceWidth = waveformVisualizer.width * 1.0 / bufferLength;
+                let x = 0;
+
+                for (let i = 0; i < bufferLength; i++) {
+                    const v = dataArray[i] / 128.0;
+                    const y = v * waveformVisualizer.height / 2;
+
+                    if (i === 0) {
+                        visualizerContext.moveTo(x, y);
+                    } else {
+                        visualizerContext.lineTo(x, y);
+                    }
+
+                    x += sliceWidth;
+                }
+
+                visualizerContext.lineTo(waveformVisualizer.width, waveformVisualizer.height / 2);
+                visualizerContext.stroke();
+            };
+
+            draw();
         };
 
         toggleButton.addEventListener('click', () => {
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+
             if (!isPlaying) {
                 initAudio();
                 oscillator.start();
+                startVisualization();
                 isPlaying = true;
                 toggleButton.textContent = '停止測試';
-                toggleButton.classList.remove('btn-primary');
-                toggleButton.classList.add('btn-danger');
+                toggleButton.classList.replace('btn-primary', 'btn-danger');
             } else {
-                oscillator?.stop();
-                audioContext?.close();
+                oscillator.stop();
                 isPlaying = false;
                 toggleButton.textContent = '開始測試';
-                toggleButton.classList.remove('btn-danger');
-                toggleButton.classList.add('btn-primary');
+                toggleButton.classList.replace('btn-danger', 'btn-primary');
             }
         });
 
-        document.getElementById('volume').addEventListener('input', (event) => {
-            gainNode?.gain.setValueAtTime(event.target.value, audioContext?.currentTime);
+        volumeSlider.addEventListener('input', (event) => {
+            const volume = event.target.value;
+            volumeValue.textContent = `${Math.round(volume * 100)}%`;
+            if (gainNode) {
+                gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+            }
         });
 
         frequencySlider.addEventListener('input', (event) => {
             const frequency = event.target.value;
             frequencyValue.textContent = `${frequency} Hz`;
-            oscillator?.frequency.setValueAtTime(frequency, audioContext?.currentTime);
+            if (oscillator) {
+                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            }
             updateFrequencyInfo(frequency);
         });
 
@@ -126,33 +185,35 @@
         });
 
         const updateFrequencyInfo = (frequency) => {
-            let info = '';
-            if (frequency < 20) {
-                info = '這是次聲波範圍。人耳通常無法聽到，但可能感受到振動。可能需要特殊設備才能產生。';
-            } else if (frequency < 60) {
-                info = '極低頻率，感覺更像是振動而非音調。';
-            } else if (frequency < 250) {
-                info = '低音範圍，給人溫暖、渾厚的感覺。';
-            } else if (frequency < 500) {
-                info = '中低音範圍，常見於男性說話聲音。';
-            } else if (frequency < 2000) {
-                info = '中音範圍，大多數樂器和人聲的主要頻率區間。';
-            } else if (frequency < 4000) {
-                info = '中高音範圍，增加清晰度和存在感。';
-            } else if (frequency < 6000) {
-                info = '高音範圍，增加亮度和細節。';
-            } else if (frequency < 15000) {
-                info = '極高音範圍，增加空氣感和光澤度。部分人可能已經聽不到。';
-            } else if (frequency <= 20000) {
-                info = '接近或超過人耳聽力上限。大多數人可能已經聽不到這個頻率。請謹慎使用。';
-            } else {
-                info = '超聲波範圍。人耳無法聽到，但某些動物可能能夠感知。某些設備可能無法準確產生這個頻率。';
-            }
-            frequencyInfo.textContent = info;
+            const infoMap = [
+                { max: 20, info: '這是次聲波範圍。人耳通常無法聽到，但可能感受到振動。可能需要特殊設備才能產生。' },
+                { max: 60, info: '極低頻率，感覺更像是振動而非音調。' },
+                { max: 250, info: '低音範圍，給人溫暖、渾厚的感覺。' },
+                { max: 500, info: '中低音範圍，常見於男性說話聲音。' },
+                { max: 2000, info: '中音範圍，大多數樂器和人聲的主要頻率區間。' },
+                { max: 4000, info: '中高音範圍，增加清晰度和存在感。' },
+                { max: 6000, info: '高音範圍，增加亮度和細節。' },
+                { max: 15000, info: '極高音範圍，增加空氣感和光澤度。部分人可能已經聽不到。' },
+                { max: 20000, info: '接近或超過人耳聽力上限。大多數人可能已經聽不到這個頻率。請謹慎使用。' },
+                { max: Infinity, info: '超聲波範圍。人耳無法聽到，但某些動物可能能夠感知。某些設備可能無法準確產生這個頻率。' }
+            ];
+
+            frequencyInfo.textContent = infoMap.find(range => frequency <= range.max).info;
         };
 
-        // 初始化頻率信息
+        // 初始化頻率信息和音量顯示
         updateFrequencyInfo(frequencySlider.value);
+        volumeValue.textContent = `${Math.round(volumeSlider.value * 100)}%`;
+
+        // 設置畫布大小
+        waveformVisualizer.width = waveformVisualizer.offsetWidth;
+        waveformVisualizer.height = waveformVisualizer.offsetHeight;
+
+        // 響應窗口大小變化
+        window.addEventListener('resize', () => {
+            waveformVisualizer.width = waveformVisualizer.offsetWidth;
+            waveformVisualizer.height = waveformVisualizer.offsetHeight;
+        });
     </script>
 </body>
 </html>
