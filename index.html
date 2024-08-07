@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全頻域音頻測試生成器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        .container {
+            text-align: center;
+            background-color: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            max-width: 600px;
+            width: 100%;
+        }
+        #toggleButton {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            transition: background-color 0.3s;
+        }
+        #toggleButton.stop {
+            background-color: #f44336;
+        }
+        .control-group {
+            margin: 10px 0;
+        }
+        label {
+            display: inline-block;
+            width: 100px;
+            text-align: right;
+            margin-right: 10px;
+        }
+        #frequencyInfo {
+            margin-top: 20px;
+            font-style: italic;
+        }
+        .warning {
+            color: #f44336;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>全頻域音頻測試生成器</h1>
+        <p class="warning">警告：本工具可產生從次聲波到超聲波的全頻域聲音。請謹慎使用，注意音量！高頻聲音可能引起不適或無法被聽到。</p>
+        
+        <div class="control-group">
+            <label for="waveType">波形類型：</label>
+            <select id="waveType">
+                <option value="sine">正弦波</option>
+                <option value="square">方波</option>
+                <option value="sawtooth">鋸齒波</option>
+                <option value="triangle">三角波</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label for="frequency">頻率 (Hz)：</label>
+            <input type="range" id="frequency" min="1" max="24000" step="1" value="1000">
+            <span id="frequencyValue">1000 Hz</span>
+        </div>
+        
+        <div class="control-group">
+            <label for="volume">音量：</label>
+            <input type="range" id="volume" min="0" max="1" step="0.1" value="0.1">
+        </div>
+        
+        <button id="toggleButton">開始測試</button>
+
+        <div id="frequencyInfo"></div>
+    </div>
+
+    <script>
+        let audioContext;
+        let oscillator;
+        let gainNode;
+        let isPlaying = false;
+
+        const toggleButton = document.getElementById('toggleButton');
+        const frequencySlider = document.getElementById('frequency');
+        const frequencyValue = document.getElementById('frequencyValue');
+        const frequencyInfo = document.getElementById('frequencyInfo');
+
+        function initAudio() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            oscillator = audioContext.createOscillator();
+            gainNode = audioContext.createGain();
+
+            const waveType = document.getElementById('waveType').value;
+            const frequency = parseFloat(frequencySlider.value);
+            const volume = parseFloat(document.getElementById('volume').value);
+
+            oscillator.type = waveType;
+            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+        }
+
+        toggleButton.onclick = () => {
+            if (!isPlaying) {
+                initAudio();
+                oscillator.start();
+                isPlaying = true;
+                toggleButton.textContent = '停止測試';
+                toggleButton.classList.add('stop');
+            } else {
+                if (oscillator) {
+                    oscillator.stop();
+                }
+                if (audioContext) {
+                    audioContext.close();
+                }
+                isPlaying = false;
+                toggleButton.textContent = '開始測試';
+                toggleButton.classList.remove('stop');
+            }
+        };
+
+        document.getElementById('volume').oninput = (event) => {
+            if (gainNode) {
+                gainNode.gain.setValueAtTime(event.target.value, audioContext.currentTime);
+            }
+        };
+
+        frequencySlider.oninput = (event) => {
+            const frequency = event.target.value;
+            frequencyValue.textContent = `${frequency} Hz`;
+            if (oscillator) {
+                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            }
+            updateFrequencyInfo(frequency);
+        };
+
+        document.getElementById('waveType').onchange = (event) => {
+            if (oscillator) {
+                oscillator.type = event.target.value;
+            }
+        };
+
+        function updateFrequencyInfo(frequency) {
+            let info = '';
+            if (frequency < 20) {
+                info = '這是次聲波範圍。人耳通常無法聽到，但可能感受到振動。可能需要特殊設備才能產生。';
+            } else if (frequency < 60) {
+                info = '極低頻率，感覺更像是振動而非音調。';
+            } else if (frequency < 250) {
+                info = '低音範圍，給人溫暖、渾厚的感覺。';
+            } else if (frequency < 500) {
+                info = '中低音範圍，常見於男性說話聲音。';
+            } else if (frequency < 2000) {
+                info = '中音範圍，大多數樂器和人聲的主要頻率區間。';
+            } else if (frequency < 4000) {
+                info = '中高音範圍，增加清晰度和存在感。';
+            } else if (frequency < 6000) {
+                info = '高音範圍，增加亮度和細節。';
+            } else if (frequency < 15000) {
+                info = '極高音範圍，增加空氣感和光澤度。部分人可能已經聽不到。';
+            } else if (frequency <= 20000) {
+                info = '接近或超過人耳聽力上限。大多數人可能已經聽不到這個頻率。請謹慎使用。';
+            } else {
+                info = '超聲波範圍。人耳無法聽到，但某些動物可能能夠感知。某些設備可能無法準確產生這個頻率。';
+            }
+            frequencyInfo.textContent = info;
+        }
+
+        // 初始化頻率信息
+        updateFrequencyInfo(frequencySlider.value);
+    </script>
+</body>
+</html>
