@@ -4,88 +4,64 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>全頻域音頻測試生成器</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
-            font-family: Arial, sans-serif;
+            min-height: 100vh;
             display: flex;
-            justify-content: center;
             align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f0f0f0;
+            background-color: #f8f9fa;
         }
-        .container {
-            text-align: center;
-            background-color: white;
-            padding: 2rem;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            max-width: 600px;
-            width: 100%;
+        .custom-range::-webkit-slider-thumb {
+            background: #0d6efd;
         }
-        #toggleButton {
-            margin: 10px;
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            transition: background-color 0.3s;
+        .custom-range::-moz-range-thumb {
+            background: #0d6efd;
         }
-        #toggleButton.stop {
-            background-color: #f44336;
-        }
-        .control-group {
-            margin: 10px 0;
-        }
-        label {
-            display: inline-block;
-            width: 100px;
-            text-align: right;
-            margin-right: 10px;
-        }
-        #frequencyInfo {
-            margin-top: 20px;
-            font-style: italic;
-        }
-        .warning {
-            color: #f44336;
-            font-weight: bold;
+        .custom-range::-ms-thumb {
+            background: #0d6efd;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>全頻域音頻測試生成器</h1>
-        <p class="warning">警告：本工具可產生從次聲波到超聲波的全頻域聲音。請謹慎使用，注意音量！高頻聲音可能引起不適或無法被聽到。</p>
-        
-        <div class="control-group">
-            <label for="waveType">波形類型：</label>
-            <select id="waveType">
-                <option value="sine">正弦波</option>
-                <option value="square">方波</option>
-                <option value="sawtooth">鋸齒波</option>
-                <option value="triangle">三角波</option>
-            </select>
-        </div>
-        
-        <div class="control-group">
-            <label for="frequency">頻率 (Hz)：</label>
-            <input type="range" id="frequency" min="1" max="24000" step="1" value="1000">
-            <span id="frequencyValue">1000 Hz</span>
-        </div>
-        
-        <div class="control-group">
-            <label for="volume">音量：</label>
-            <input type="range" id="volume" min="0" max="1" step="0.1" value="0.1">
-        </div>
-        
-        <button id="toggleButton">開始測試</button>
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h1 class="card-title text-center mb-4">全頻域音頻測試生成器</h1>
+                        <p class="text-danger fw-bold">警告：本工具可產生從次聲波到超聲波的全頻域聲音。請謹慎使用，注意音量！高頻聲音可能引起不適或無法被聽到。</p>
+                        
+                        <div class="mb-3">
+                            <label for="waveType" class="form-label">波形類型：</label>
+                            <select id="waveType" class="form-select">
+                                <option value="sine">正弦波</option>
+                                <option value="square">方波</option>
+                                <option value="sawtooth">鋸齒波</option>
+                                <option value="triangle">三角波</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="frequency" class="form-label">頻率 (Hz)：<span id="frequencyValue" class="badge bg-primary">1000 Hz</span></label>
+                            <input type="range" class="form-range custom-range" id="frequency" min="1" max="24000" step="1" value="1000">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="volume" class="form-label">音量：</label>
+                            <input type="range" class="form-range custom-range" id="volume" min="0" max="1" step="0.1" value="0.1">
+                        </div>
+                        
+                        <button id="toggleButton" class="btn btn-primary w-100 mb-3">開始測試</button>
 
-        <div id="frequencyInfo"></div>
+                        <div id="frequencyInfo" class="alert alert-info" role="alert"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         let audioContext;
         let oscillator;
@@ -97,7 +73,7 @@
         const frequencyValue = document.getElementById('frequencyValue');
         const frequencyInfo = document.getElementById('frequencyInfo');
 
-        function initAudio() {
+        const initAudio = () => {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
             oscillator = audioContext.createOscillator();
             gainNode = audioContext.createGain();
@@ -112,50 +88,44 @@
 
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
-        }
+        };
 
-        toggleButton.onclick = () => {
+        toggleButton.addEventListener('click', () => {
             if (!isPlaying) {
                 initAudio();
                 oscillator.start();
                 isPlaying = true;
                 toggleButton.textContent = '停止測試';
-                toggleButton.classList.add('stop');
+                toggleButton.classList.remove('btn-primary');
+                toggleButton.classList.add('btn-danger');
             } else {
-                if (oscillator) {
-                    oscillator.stop();
-                }
-                if (audioContext) {
-                    audioContext.close();
-                }
+                oscillator?.stop();
+                audioContext?.close();
                 isPlaying = false;
                 toggleButton.textContent = '開始測試';
-                toggleButton.classList.remove('stop');
+                toggleButton.classList.remove('btn-danger');
+                toggleButton.classList.add('btn-primary');
             }
-        };
+        });
 
-        document.getElementById('volume').oninput = (event) => {
-            if (gainNode) {
-                gainNode.gain.setValueAtTime(event.target.value, audioContext.currentTime);
-            }
-        };
+        document.getElementById('volume').addEventListener('input', (event) => {
+            gainNode?.gain.setValueAtTime(event.target.value, audioContext?.currentTime);
+        });
 
-        frequencySlider.oninput = (event) => {
+        frequencySlider.addEventListener('input', (event) => {
             const frequency = event.target.value;
             frequencyValue.textContent = `${frequency} Hz`;
-            if (oscillator) {
-                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-            }
+            oscillator?.frequency.setValueAtTime(frequency, audioContext?.currentTime);
             updateFrequencyInfo(frequency);
-        };
+        });
 
-        document.getElementById('waveType').onchange = (event) => {
+        document.getElementById('waveType').addEventListener('change', (event) => {
             if (oscillator) {
                 oscillator.type = event.target.value;
             }
-        };
+        });
 
-        function updateFrequencyInfo(frequency) {
+        const updateFrequencyInfo = (frequency) => {
             let info = '';
             if (frequency < 20) {
                 info = '這是次聲波範圍。人耳通常無法聽到，但可能感受到振動。可能需要特殊設備才能產生。';
@@ -179,7 +149,7 @@
                 info = '超聲波範圍。人耳無法聽到，但某些動物可能能夠感知。某些設備可能無法準確產生這個頻率。';
             }
             frequencyInfo.textContent = info;
-        }
+        };
 
         // 初始化頻率信息
         updateFrequencyInfo(frequencySlider.value);
