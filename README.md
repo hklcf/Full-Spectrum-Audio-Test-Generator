@@ -12,6 +12,10 @@ The Full Spectrum Audio Test Generator is a web-based tool designed for audio te
 - Informative frequency descriptions
 - Simple and intuitive user interface
 
+## Demo
+
+[Live Demo](https://hklcf.github.io/full-spectrum-audio-test-generator/)
+
 ## Usage
 
 1. Clone the repository or download the HTML file.
