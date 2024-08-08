@@ -10,22 +10,22 @@
             min-height: 100vh;
             display: flex;
             align-items: center;
-            background-color: #f8f9fa;
-        }
-        .custom-range::-webkit-slider-thumb {
-            background: #0d6efd;
-        }
-        .custom-range::-moz-range-thumb {
-            background: #0d6efd;
-        }
-        .custom-range::-ms-thumb {
-            background: #0d6efd;
+            background-color: var(--bs-body-bg);
+            transition: background-color 0.3s ease;
         }
         #waveformVisualizer {
             width: 100%;
             height: 100px;
-            background-color: #e9ecef;
             margin-bottom: 1rem;
+        }
+        .dark-mode {
+            --bs-body-bg: #343a40;
+            --bs-body-color: #f8f9fa;
+            --bs-card-bg: #495057;
+        }
+        .dark-mode .alert-info {
+            background-color: #17a2b8;
+            color: #fff;
         }
     </style>
 </head>
@@ -52,17 +52,22 @@
                         
                         <div class="mb-3">
                             <label for="frequency" class="form-label">頻率 (Hz)：<span id="frequencyValue" class="badge bg-primary">1000 Hz</span></label>
-                            <input type="range" class="form-range custom-range" id="frequency" min="1" max="24000" step="1" value="1000">
+                            <input type="range" class="form-range" id="frequency" min="1" max="24000" step="1" value="1000">
                         </div>
                         
                         <div class="mb-3">
                             <label for="volume" class="form-label">音量：<span id="volumeValue" class="badge bg-secondary">10%</span></label>
-                            <input type="range" class="form-range custom-range" id="volume" min="0" max="1" step="0.01" value="0.1">
+                            <input type="range" class="form-range" id="volume" min="0" max="1" step="0.01" value="0.1">
                         </div>
                         
                         <button id="toggleButton" class="btn btn-primary w-100 mb-3">開始測試</button>
 
                         <div id="frequencyInfo" class="alert alert-info" role="alert"></div>
+
+                        <div class="form-check form-switch mt-3">
+                            <input class="form-check-input" type="checkbox" id="darkModeToggle">
+                            <label class="form-check-label" for="darkModeToggle">暗色模式</label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -70,150 +75,251 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        let oscillator = null;
-        let gainNode = null;
-        let analyser = null;
-        let isPlaying = false;
+    <script type="module">
+        const AudioGenerator = (() => {
+            let audioContext, oscillator, gainNode, analyser;
+            let isPlaying = false;
 
-        const toggleButton = document.getElementById('toggleButton');
-        const frequencySlider = document.getElementById('frequency');
-        const frequencyValue = document.getElementById('frequencyValue');
-        const volumeSlider = document.getElementById('volume');
-        const volumeValue = document.getElementById('volumeValue');
-        const frequencyInfo = document.getElementById('frequencyInfo');
-        const waveformVisualizer = document.getElementById('waveformVisualizer');
-        const visualizerContext = waveformVisualizer.getContext('2d');
+            const init = () => {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                oscillator = audioContext.createOscillator();
+                gainNode = audioContext.createGain();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 2048;
 
-        const initAudio = () => {
-            oscillator = audioContext.createOscillator();
-            gainNode = audioContext.createGain();
-            analyser = audioContext.createAnalyser();
-
-            oscillator.type = document.getElementById('waveType').value;
-            oscillator.frequency.setValueAtTime(parseFloat(frequencySlider.value), audioContext.currentTime);
-            gainNode.gain.setValueAtTime(parseFloat(volumeSlider.value), audioContext.currentTime);
-
-            oscillator.connect(gainNode);
-            gainNode.connect(analyser);
-            analyser.connect(audioContext.destination);
-        };
-
-        const startVisualization = () => {
-            analyser.fftSize = 2048;
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-            
-            visualizerContext.clearRect(0, 0, waveformVisualizer.width, waveformVisualizer.height);
-
-            const draw = () => {
-                requestAnimationFrame(draw);
-                analyser.getByteTimeDomainData(dataArray);
-
-                visualizerContext.fillStyle = 'rgb(233, 236, 239)';
-                visualizerContext.fillRect(0, 0, waveformVisualizer.width, waveformVisualizer.height);
-
-                visualizerContext.lineWidth = 2;
-                visualizerContext.strokeStyle = 'rgb(13, 110, 253)';
-                visualizerContext.beginPath();
-
-                const sliceWidth = waveformVisualizer.width * 1.0 / bufferLength;
-                let x = 0;
-
-                for (let i = 0; i < bufferLength; i++) {
-                    const v = dataArray[i] / 128.0;
-                    const y = v * waveformVisualizer.height / 2;
-
-                    if (i === 0) {
-                        visualizerContext.moveTo(x, y);
-                    } else {
-                        visualizerContext.lineTo(x, y);
-                    }
-
-                    x += sliceWidth;
-                }
-
-                visualizerContext.lineTo(waveformVisualizer.width, waveformVisualizer.height / 2);
-                visualizerContext.stroke();
+                oscillator.connect(gainNode).connect(analyser).connect(audioContext.destination);
             };
 
-            draw();
-        };
-
-        toggleButton.addEventListener('click', () => {
-            if (audioContext.state === 'suspended') {
-                audioContext.resume();
-            }
-
-            if (!isPlaying) {
-                initAudio();
-                oscillator.start();
-                startVisualization();
-                isPlaying = true;
-                toggleButton.textContent = '停止測試';
-                toggleButton.classList.replace('btn-primary', 'btn-danger');
-            } else {
-                oscillator.stop();
-                isPlaying = false;
-                toggleButton.textContent = '開始測試';
-                toggleButton.classList.replace('btn-danger', 'btn-primary');
-            }
-        });
-
-        volumeSlider.addEventListener('input', (event) => {
-            const volume = event.target.value;
-            volumeValue.textContent = `${Math.round(volume * 100)}%`;
-            if (gainNode) {
-                gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
-            }
-        });
-
-        frequencySlider.addEventListener('input', (event) => {
-            const frequency = event.target.value;
-            frequencyValue.textContent = `${frequency} Hz`;
-            if (oscillator) {
+            const start = (waveType, frequency, volume) => {
+                if (isPlaying) stop();
+                init();
+                oscillator.type = waveType;
                 oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+                gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+                oscillator.start();
+                isPlaying = true;
+            };
+
+            const stop = () => {
+                if (isPlaying) {
+                    oscillator.stop();
+                    audioContext.close();
+                    isPlaying = false;
+                }
+            };
+
+            const setFrequency = (frequency) => {
+                oscillator?.frequency.exponentialRampToValueAtTime(frequency, audioContext.currentTime + 0.1);
+            };
+
+            const setVolume = (volume) => {
+                gainNode?.gain.linearRampToValueAtTime(volume, audioContext.currentTime + 0.1);
+            };
+
+            const setWaveType = (waveType) => {
+                if (oscillator) oscillator.type = waveType;
+            };
+
+            return { start, stop, setFrequency, setVolume, setWaveType, getAnalyser: () => analyser };
+        })();
+
+        const UIController = (() => {
+            const DOMElements = {
+                toggleButton: document.getElementById('toggleButton'),
+                frequencySlider: document.getElementById('frequency'),
+                frequencyValue: document.getElementById('frequencyValue'),
+                volumeSlider: document.getElementById('volume'),
+                volumeValue: document.getElementById('volumeValue'),
+                waveTypeSelect: document.getElementById('waveType'),
+                frequencyInfo: document.getElementById('frequencyInfo'),
+                waveformVisualizer: document.getElementById('waveformVisualizer'),
+                darkModeToggle: document.getElementById('darkModeToggle')
+            };
+
+            const updateFrequencyInfo = (frequency) => {
+                const infoMap = [
+                    { max: 20, info: '這是次聲波範圍。人耳通常無法聽到，但可能感受到振動。可能需要特殊設備才能產生。' },
+                    { max: 60, info: '極低頻率，感覺更像是振動而非音調。' },
+                    { max: 250, info: '低音範圍，給人溫暖、渾厚的感覺。' },
+                    { max: 500, info: '中低音範圍，常見於男性說話聲音。' },
+                    { max: 2000, info: '中音範圍，大多數樂器和人聲的主要頻率區間。' },
+                    { max: 4000, info: '中高音範圍，增加清晰度和存在感。' },
+                    { max: 6000, info: '高音範圍，增加亮度和細節。' },
+                    { max: 15000, info: '極高音範圍，增加空氣感和光澤度。部分人可能已經聽不到。' },
+                    { max: 20000, info: '接近或超過人耳聽力上限。大多數人可能已經聽不到這個頻率。請謹慎使用。' },
+                    { max: Infinity, info: '超聲波範圍。人耳無法聽到，但某些動物可能能夠感知。某些設備可能無法準確產生這個頻率。' }
+                ];
+
+                DOMElements.frequencyInfo.textContent = infoMap.find(range => frequency <= range.max).info;
+            };
+
+            const toggleDarkMode = () => {
+                document.body.classList.toggle('dark-mode');
+                localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+                WaveformVisualizer.updateColors();
+            };
+
+            return {
+                DOMElements,
+                updateFrequencyInfo,
+                toggleDarkMode
+            };
+        })();
+
+        const WaveformVisualizer = (() => {
+            const canvas = UIController.DOMElements.waveformVisualizer;
+            const ctx = canvas.getContext('2d');
+            let animationId;
+            let backgroundColor, lineColor;
+            let isDarkMode = false;
+
+            const updateColors = () => {
+                isDarkMode = document.body.classList.contains('dark-mode');
+                backgroundColor = isDarkMode ? '#212529' : '#e9ecef';
+                lineColor = isDarkMode ? '#0dcaf0' : '#0d6efd';
+                canvas.style.backgroundColor = backgroundColor;
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                    draw(AudioGenerator.getAnalyser());
+                } else {
+                    redraw();
+                }
+            };
+
+            const draw = (analyser) => {
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+
+                const drawVisual = () => {
+                    animationId = requestAnimationFrame(drawVisual);
+                    analyser.getByteTimeDomainData(dataArray);
+
+                    ctx.fillStyle = backgroundColor;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = lineColor;
+                    ctx.beginPath();
+
+                    const sliceWidth = canvas.width * 1.0 / bufferLength;
+                    let x = 0;
+
+                    for (let i = 0; i < bufferLength; i++) {
+                        const v = dataArray[i] / 128.0;
+                        const y = v * canvas.height / 2;
+
+                        if (i === 0) {
+                            ctx.moveTo(x, y);
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+
+                        x += sliceWidth;
+                    }
+
+                    ctx.lineTo(canvas.width, canvas.height / 2);
+                    ctx.stroke();
+                };
+
+                drawVisual();
+            };
+
+            const redraw = () => {
+                ctx.fillStyle = backgroundColor;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = lineColor;
+                ctx.beginPath();
+                ctx.moveTo(0, canvas.height / 2);
+                ctx.lineTo(canvas.width, canvas.height / 2);
+                ctx.stroke();
+            };
+
+            const stop = () => {
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                }
+                redraw();
+            };
+
+            const resize = () => {
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+                redraw();
+            };
+
+            updateColors();
+
+            return { draw, stop, resize, updateColors };
+        })();
+
+        (() => {
+            const { DOMElements, updateFrequencyInfo, toggleDarkMode } = UIController;
+
+            let isPlaying = false;
+
+            const toggleAudio = () => {
+                if (!isPlaying) {
+                    const frequency = parseFloat(DOMElements.frequencySlider.value);
+                    const volume = parseFloat(DOMElements.volumeSlider.value);
+                    const waveType = DOMElements.waveTypeSelect.value;
+
+                    AudioGenerator.start(waveType, frequency, volume);
+                    WaveformVisualizer.draw(AudioGenerator.getAnalyser());
+                    
+                    DOMElements.toggleButton.textContent = '停止測試';
+                    DOMElements.toggleButton.classList.replace('btn-primary', 'btn-danger');
+                } else {
+                    AudioGenerator.stop();
+                    WaveformVisualizer.stop();
+                    
+                    DOMElements.toggleButton.textContent = '開始測試';
+                    DOMElements.toggleButton.classList.replace('btn-danger', 'btn-primary');
+                }
+                isPlaying = !isPlaying;
+            };
+
+            DOMElements.toggleButton.addEventListener('click', toggleAudio);
+
+            DOMElements.frequencySlider.addEventListener('input', (event) => {
+                const frequency = event.target.value;
+                DOMElements.frequencyValue.textContent = `${frequency} Hz`;
+                AudioGenerator.setFrequency(parseFloat(frequency));
+                updateFrequencyInfo(parseFloat(frequency));
+            });
+
+            DOMElements.volumeSlider.addEventListener('input', (event) => {
+                const volume = event.target.value;
+                DOMElements.volumeValue.textContent = `${Math.round(volume * 100)}%`;
+                AudioGenerator.setVolume(parseFloat(volume));
+            });
+
+            DOMElements.waveTypeSelect.addEventListener('change', (event) => {
+                AudioGenerator.setWaveType(event.target.value);
+            });
+
+            DOMElements.darkModeToggle.addEventListener('change', toggleDarkMode);
+
+            document.addEventListener('keydown', (event) => {
+                if (event.code === 'Space') {
+                    event.preventDefault();
+                    toggleAudio();
+                }
+            });
+
+            updateFrequencyInfo(DOMElements.frequencySlider.value);
+            DOMElements.volumeValue.textContent = `${Math.round(DOMElements.volumeSlider.value * 100)}%`;
+            WaveformVisualizer.resize();
+
+            window.addEventListener('resize', WaveformVisualizer.resize);
+
+            if (localStorage.getItem('darkMode') === 'true') {
+                DOMElements.darkModeToggle.checked = true;
+                toggleDarkMode();
             }
-            updateFrequencyInfo(frequency);
-        });
-
-        document.getElementById('waveType').addEventListener('change', (event) => {
-            if (oscillator) {
-                oscillator.type = event.target.value;
-            }
-        });
-
-        const updateFrequencyInfo = (frequency) => {
-            const infoMap = [
-                { max: 20, info: '這是次聲波範圍。人耳通常無法聽到，但可能感受到振動。可能需要特殊設備才能產生。' },
-                { max: 60, info: '極低頻率，感覺更像是振動而非音調。' },
-                { max: 250, info: '低音範圍，給人溫暖、渾厚的感覺。' },
-                { max: 500, info: '中低音範圍，常見於男性說話聲音。' },
-                { max: 2000, info: '中音範圍，大多數樂器和人聲的主要頻率區間。' },
-                { max: 4000, info: '中高音範圍，增加清晰度和存在感。' },
-                { max: 6000, info: '高音範圍，增加亮度和細節。' },
-                { max: 15000, info: '極高音範圍，增加空氣感和光澤度。部分人可能已經聽不到。' },
-                { max: 20000, info: '接近或超過人耳聽力上限。大多數人可能已經聽不到這個頻率。請謹慎使用。' },
-                { max: Infinity, info: '超聲波範圍。人耳無法聽到，但某些動物可能能夠感知。某些設備可能無法準確產生這個頻率。' }
-            ];
-
-            frequencyInfo.textContent = infoMap.find(range => frequency <= range.max).info;
-        };
-
-        // 初始化頻率信息和音量顯示
-        updateFrequencyInfo(frequencySlider.value);
-        volumeValue.textContent = `${Math.round(volumeSlider.value * 100)}%`;
-
-        // 設置畫布大小
-        waveformVisualizer.width = waveformVisualizer.offsetWidth;
-        waveformVisualizer.height = waveformVisualizer.offsetHeight;
-
-        // 響應窗口大小變化
-        window.addEventListener('resize', () => {
-            waveformVisualizer.width = waveformVisualizer.offsetWidth;
-            waveformVisualizer.height = waveformVisualizer.offsetHeight;
-        });
+        })();
     </script>
 </body>
 </html>
